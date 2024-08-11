@@ -1,0 +1,30 @@
+[tool.poetry]
+name = "iseecolor-v2"
+version = "0.1.0"
+description = "ISeeColor V2 Export Package"
+authors = ["Srijith Rajeev <srijith2311@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+requests = "2.32.3"
+numpy = "1.26.4"
+opencv-python-headless = "4.10.0.84"
+pandas = "2.2.2"
+pillow = "10.4.0"
+pyqt5 = "5.15.10"
+pyqt5-qt5 = "5.15.2"
+pyqt5-sip = "12.15.0"
+pyqt5designer = "5.14.1"
+scipy = "1.14.0"
+seaborn = "0.13.2"
+torch = "2.3.1"
+torchvision = "0.18.1"
+tqdm = "4.66.4"
+ultralytics = "8.2.59"
+ultralytics-thop = "2.0.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

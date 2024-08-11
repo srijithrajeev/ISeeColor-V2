@@ -1,0 +1,45 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+iseecolor-env/
+env/
+venv/
+.venv/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# PyCharm project files
+.idea/
+
+# VS Code settings
+.vscode/
+
+# Logs
+*.log
+*.out
+*.err
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Python-specific backups
+*.bak
+
+# Data files (optional, if you don't want to track data)
+data/
+*.csv
+
+# Model files
+*.pt
