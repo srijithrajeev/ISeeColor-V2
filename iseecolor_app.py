@@ -4,18 +4,16 @@ import numpy as np
 import pandas as pd
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QLabel, QPushButton, QFileDialog, 
                              QVBoxLayout, QHBoxLayout, QFrame, QSlider, QTableWidget, QTableWidgetItem, 
-                             QGroupBox, QGridLayout, QStatusBar)
+                             QGroupBox, QGridLayout, QStatusBar,QSplitter)
 from PyQt5.QtGui import QImage, QPixmap, QIcon
 from PyQt5.QtCore import Qt, QTimer, QThreadPool, QRunnable, pyqtSlot, QObject, pyqtSignal
 
 from ultralytics import YOLO
 
-# Signals to communicate between threads
 class WorkerSignals(QObject):
   result = pyqtSignal(object, object, object)
   update = pyqtSignal(str)
 
-# Worker thread for processing video frames
 class VideoProcessor(QRunnable):
   def __init__(self, cap, model, fixation_data):
       super().__init__()
@@ -32,14 +30,10 @@ class VideoProcessor(QRunnable):
           if not ret:
               break
           
-          # Get current frame number
           frame_number = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES))
-          # Run YOLO segmentation model on the frame
           results = self.model(frame, task='segment')
-          # Get fixation data for the current frame
           frame_fixations = self.fixation_data[self.fixation_data['Frame'] == frame_number]
-
-          # Emit processed results and update status
+          
           self.signals.result.emit(frame, results, frame_fixations)
           self.signals.update.emit(f"Processing frame: {frame_number}")
 
@@ -52,7 +46,6 @@ class ISeeColorApp(QMainWindow):
       self.setWindowTitle("ISeeColor Visualization")
       self.setGeometry(100, 100, 1200, 800)
       
-      # Load YOLO model for object segmentation
       self.model = YOLO('yolov8n-seg.pt')
       self.cap = None
       self.video_processor = None
@@ -63,31 +56,28 @@ class ISeeColorApp(QMainWindow):
       self.fixations_per_object = pd.DataFrame(columns=['Object', 'Fixation_Count'])
       self.object_counts = {}
       
-      # Initialize master DataFrame to track fixations across all frames
+      # Initialize master DataFrame
       self.master_fixation_data = pd.DataFrame(columns=['Frame', 'Object', 'Fixation_Count'])
       
       self.initUI()
       
-      # Thread pool for running video processing in the background
       self.threadpool = QThreadPool()
 
-  # Initialize the user interface
   def initUI(self):
     self.setStyleSheet("background-color: #f5f5f5;")
-  
+
     central_widget = QWidget()
     self.setCentralWidget(central_widget)
-    main_layout = QGridLayout(central_widget)
-    main_layout.setSpacing(10)
-    main_layout.setContentsMargins(10, 10, 10, 10)
+    
+    # Create a QSplitter to make the panes adjustable
+    main_splitter = QSplitter(Qt.Horizontal, central_widget)
 
-    # Left pane: contains video information and object tables
+    # Left pane
     left_pane = QFrame()
     left_pane.setFrameShape(QFrame.StyledPanel)
     left_layout = QVBoxLayout(left_pane)
     left_layout.setSpacing(10)
 
-    # Group Box Style for consistent appearance
     group_box_style = """
     QGroupBox {
         font-weight: bold;
@@ -103,7 +93,7 @@ class ISeeColorApp(QMainWindow):
     }
     """
 
-    # Video Information Group: displays total frames, time, and other stats
+    # Video Information Group
     info_group = QGroupBox("Video Information")
     info_group.setStyleSheet(group_box_style)
     info_layout = QVBoxLayout()
@@ -118,7 +108,7 @@ class ISeeColorApp(QMainWindow):
     info_group.setLayout(info_layout)
     left_layout.addWidget(info_group)
 
-    # Table for objects detected in the current frame
+    # Current Frame Objects Table
     current_frame_group = QGroupBox("Objects in Current Frame")
     current_frame_group.setStyleSheet(group_box_style)
     current_frame_layout = QVBoxLayout()
@@ -138,7 +128,7 @@ class ISeeColorApp(QMainWindow):
     current_frame_group.setLayout(current_frame_layout)
     left_layout.addWidget(current_frame_group)
 
-    # Table for fixated objects across all frames
+    # Fixated Objects Table
     fixated_objects_group = QGroupBox("Fixated Objects (Total)")
     fixated_objects_group.setStyleSheet(group_box_style)
     fixated_objects_layout = QVBoxLayout()
@@ -152,14 +142,15 @@ class ISeeColorApp(QMainWindow):
     fixated_objects_group.setLayout(fixated_objects_layout)
     left_layout.addWidget(fixated_objects_group)
 
-    main_layout.addWidget(left_pane, 0, 0, 2, 1)
+    # Add left pane to splitter
+    main_splitter.addWidget(left_pane)
 
-    # Center pane: contains video display and control buttons
+    # Center pane
     center_pane = QFrame()
     center_pane.setFrameShape(QFrame.StyledPanel)
     center_layout = QVBoxLayout(center_pane)
 
-    # Buttons to load video and fixation data
+    # Load Video and Load Fixation Data buttons
     load_buttons_layout = QHBoxLayout()
     self.load_video_button = QPushButton("Load Video")
     self.load_video_button.setIcon(QIcon.fromTheme("video-x-generic"))
@@ -171,12 +162,12 @@ class ISeeColorApp(QMainWindow):
     load_buttons_layout.addWidget(self.load_fixation_button)
     center_layout.addLayout(load_buttons_layout)
 
-    # Label to display video frames
+    # Video Display
     self.video_display = QLabel()
     self.video_display.setStyleSheet("background-color: black; border: 1px solid #ccc; border-radius: 5px;")
     center_layout.addWidget(self.video_display)
 
-    # Control buttons for video playback
+    # Control Buttons
     controls_layout = QHBoxLayout()
     self.play_button = QPushButton("Play")
     self.play_button.setIcon(QIcon.fromTheme("media-playback-start"))
@@ -199,7 +190,7 @@ class ISeeColorApp(QMainWindow):
 
     center_layout.addLayout(controls_layout)
 
-    # Slider to navigate through video frames
+    # Slider
     self.slider = QSlider(Qt.Horizontal)
     self.slider.setStyleSheet("""
     QSlider::groove:horizontal {
@@ -218,15 +209,23 @@ class ISeeColorApp(QMainWindow):
     """)
     center_layout.addWidget(self.slider)
 
-    # Label to display current frame and total frames
+    # Frame Counter Label
     self.frame_counter_label = QLabel("Frame: 0 / 0")
     self.frame_counter_label.setAlignment(Qt.AlignCenter)
     self.frame_counter_label.setStyleSheet("font-size: 14px; color: #333;")
     center_layout.addWidget(self.frame_counter_label)
 
-    main_layout.addWidget(center_pane, 0, 1, 2, 1)
+    # Add center pane to splitter
+    main_splitter.addWidget(center_pane)
 
-    # Connect buttons to their corresponding functions
+    # Set initial sizes for the splitter panes
+    main_splitter.setSizes([400, 800])  # Adjust the initial sizes as needed
+
+    # Add splitter to the main layout
+    main_layout = QVBoxLayout(central_widget)
+    main_layout.addWidget(main_splitter)
+
+    # Connect buttons to functions
     self.load_video_button.clicked.connect(self.load_video)
     self.load_fixation_button.clicked.connect(self.load_fixation_data)
     self.play_button.clicked.connect(lambda: self.handle_button_click(self.play_button, self.play_video))
@@ -236,13 +235,13 @@ class ISeeColorApp(QMainWindow):
     self.prev_frame_button.clicked.connect(lambda: self.handle_button_click(self.prev_frame_button, self.prev_frame))
     self.slider.sliderMoved.connect(self.slider_moved)
 
-    # Connect buttons to their corresponding functions
+    # Add status bar
     self.statusBar = QStatusBar()
     self.setStatusBar(self.statusBar)
     self.statusBar.setStyleSheet("background-color: #f5f5f5; color: #333;")
     self.statusBar.showMessage("Ready")
 
-  # Reset button styles to default
+
   def reset_button_styles(self):
     button_style = """
     QPushButton {
@@ -259,7 +258,6 @@ class ISeeColorApp(QMainWindow):
     self.prev_frame_button.setStyleSheet(button_style)
     self.next_frame_button.setStyleSheet(button_style)
 
-  # Highlight the currently active button
   def highlight_button(self, button):
     self.reset_button_styles()
     button.setStyleSheet("""
@@ -271,12 +269,11 @@ class ISeeColorApp(QMainWindow):
         border-radius: 5px;
     }
     """)
-  # Handle button clicks and trigger the corresponding action
+
   def handle_button_click(self, button, action):
     self.highlight_button(button)
     action()
 
-  # Update the table with objects detected in the current frame
   def update_current_frame_table(self):
     self.current_frame_table.setRowCount(len(self.object_counts))
     for row, (obj, count) in enumerate(self.object_counts.items()):
@@ -284,7 +281,6 @@ class ISeeColorApp(QMainWindow):
         self.current_frame_table.setItem(row, 1, QTableWidgetItem(str(count)))
     self.current_frame_table.sortItems(1, Qt.DescendingOrder)
 
-  # Update the table with the total fixations on objects across all frames
   def update_fixated_objects_table(self):
       self.fixated_objects_table.setRowCount(len(self.fixations_per_object))
       for row, (obj, count) in enumerate(self.fixations_per_object.values):
@@ -292,7 +288,6 @@ class ISeeColorApp(QMainWindow):
           self.fixated_objects_table.setItem(row, 1, QTableWidgetItem(str(count)))
       self.fixated_objects_table.sortItems(1, Qt.DescendingOrder)
 
-  # Update the fixated objects table using data from the master DataFrame
   def update_fixated_objects_table_from_master(self, frame_number):
       # Filter the master dataframe for frames up to the current frame
       frame_data = self.master_fixation_data[self.master_fixation_data['Frame'] <= frame_number]
@@ -307,19 +302,16 @@ class ISeeColorApp(QMainWindow):
           self.fixated_objects_table.setItem(row, 1, QTableWidgetItem(str(count)))
       self.fixated_objects_table.sortItems(1, Qt.DescendingOrder)
 
-  # Clear the data in both table
   def clear_tables(self):
       self.current_frame_table.setRowCount(0)
       self.fixated_objects_table.setRowCount(0)
 
-  # Reset the tables and the data they contain
   def reset_tables(self):
       self.fixations_per_object = pd.DataFrame(columns=['Object', 'Fixation_Count'])
       self.object_counts = {}
       self.update_current_frame_table()
       self.update_fixated_objects_table()
 
-  # Load video file and initialize related parameters
   def load_video(self):
         file_name, _ = QFileDialog.getOpenFileName(self, "Open Video File", "", "Video Files (*.mp4 *.avi *.mov)")
         if file_name:
@@ -343,25 +335,21 @@ class ISeeColorApp(QMainWindow):
           'Object': '',
           'Fixation_Count': 0
       })
- 
-  # Load fixation data from a CSV file
+
   def load_fixation_data(self):
       file_name, _ = QFileDialog.getOpenFileName(self, "Open Fixation Data File", "", "CSV Files (*.csv)")
       if file_name:
           self.fixation_data = pd.read_csv(file_name)
           self.total_fixations_label.setText(f"Total Fixations: {len(self.fixation_data)}")
 
-  # Start video playback
   def play_video(self):
       if self.cap is None:
           return
       self.timer.start(30)  # Update every 30 ms
 
-  # Pause video playback
   def pause_video(self):
       self.timer.stop()
 
-  # Stop video playback and reset to the first frame
   def stop_video(self):
       self.timer.stop()
       if self.cap:
@@ -380,7 +368,6 @@ class ISeeColorApp(QMainWindow):
 #       self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num-1)
 #       self.update_frame()
 
-  # Move to the next frame in the video
   def next_frame(self):
       if self.cap is None:
           return
@@ -388,7 +375,6 @@ class ISeeColorApp(QMainWindow):
       self.cap.set(cv2.CAP_PROP_POS_FRAMES, current_frame)
       self.update_frame()
 
-  # Move to the previous frame in the video
   def prev_frame(self):
       if self.cap is None:
           return
@@ -396,7 +382,6 @@ class ISeeColorApp(QMainWindow):
       self.cap.set(cv2.CAP_PROP_POS_FRAMES, max(current_frame - 2, 0))
       self.update_frame()
 
-  # Update video playback when the slider is moved
   def slider_moved(self, position):
       if self.cap is None:
           return
@@ -405,7 +390,6 @@ class ISeeColorApp(QMainWindow):
       self.frame_counter_label.setText(f"Frame: {position} / {total_frames}")
       self.update_frame()
 
-  # Update the displayed frame and process the results
   def update_frame(self):
     if self.cap is None or self.fixation_data is None:
         return
@@ -417,16 +401,20 @@ class ISeeColorApp(QMainWindow):
     frame_number = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES))
     
     # Resize the frame for faster YOLO inference
-    resized_frame = cv2.resize(frame, (640, 480))  # Resize to 640x480 or any other desired size
+    scaling_factor = 0.5  # Adjust this factor as needed
+
+    # Calculate the new dimensions based on the scaling factor
+    new_width = int(frame.shape[1] * scaling_factor)
+    new_height = int(frame.shape[0] * scaling_factor)
+
+    # Resize the frame using the calculated dimensions
+    resized_frame = cv2.resize(frame, (new_width, new_height))
     
-    # Run YOLO segmentation on the resized frame
     results = self.model(resized_frame, task='segment')
     
-    # Get fixation data for the current frame
     frame_fixations = self.fixation_data[self.fixation_data['Frame'] == frame_number]
     
-    # Process fixations and update the display
-    self.process_fixations(results, frame_fixations, frame_number)
+    self.process_fixations(results, frame_fixations, frame_number, frame.shape[:-1] )
     self.display_frame(frame, results)
     
     self.slider.setValue(frame_number)
@@ -436,10 +424,10 @@ class ISeeColorApp(QMainWindow):
     # Update the fixated objects table based on the current frame
     self.update_fixated_objects_table_from_master(frame_number)
 
-  # Process the fixations and update the master DataFrame
-  def process_fixations(self, results, frame_fixations, frame_number):
+  def process_fixations(self, results, frame_fixations, frame_number, frame_dim):
         # Reset fixations for this frame
     self.master_fixation_data.loc[self.master_fixation_data['Frame'] == frame_number, ['Object', 'Fixation_Count']] = ['', 0]
+    orig_height, orig_width = frame_dim[0], frame_dim[1]
     
     fixation_overlapped = False
     
@@ -447,7 +435,7 @@ class ISeeColorApp(QMainWindow):
         x, y = fixation['X_Coordinate'], fixation['Y_Coordinate']
         
         # Get the dimensions of the original image and the segmentation mask
-        orig_height, orig_width = results[0].orig_shape
+        
         mask_height, mask_width = results[0].masks.data.shape[1:]
         
         # Scale the fixation coordinates to match the mask dimensions
@@ -468,6 +456,7 @@ class ISeeColorApp(QMainWindow):
                 mask = (self.master_fixation_data['Frame'] == frame_number) & (self.master_fixation_data['Object'] == obj_class)
                 if mask.any():
                     self.master_fixation_data.loc[mask, 'Fixation_Count'] += 1
+                    print(self.master_fixation_data.loc[mask, 'Fixation_Count'])
                 else:
                     self.master_fixation_data.loc[self.master_fixation_data['Frame'] == frame_number, ['Object', 'Fixation_Count']] = [obj_class, 1]
                 
@@ -479,7 +468,6 @@ class ISeeColorApp(QMainWindow):
     # Update the fixated objects table
     self.update_fixated_objects_table_from_master(frame_number)
 
-   # Display the processed frame with annotations
   def display_frame(self, frame, results):
     DISPLAY_WIDTH = 640
     DISPLAY_HEIGHT = 480
@@ -593,7 +581,6 @@ class ISeeColorApp(QMainWindow):
     qt_image = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888)
     self.video_display.setPixmap(QPixmap.fromImage(qt_image))
 
-    # Free up memory
     del frame, results, overlay, combined_frame, resized_frame, rgb_image, qt_image
 
 if __name__ == "__main__":
